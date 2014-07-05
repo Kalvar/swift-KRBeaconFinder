@@ -7,21 +7,25 @@
 //
 
 import UIKit
+import CoreLocation
+import CoreBluetooth
 
 @UIApplicationMain
-class AppDelegate: UIResponder, UIApplicationDelegate {
+class AppDelegate: UIResponder, UIApplicationDelegate, KRBeaconOneDelegate {
                             
     var window: UIWindow?
+    var beaconFinder : KRBeaconOne!;
 
-
-    func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: NSDictionary?) -> Bool {
-        // Override point for customization after application launch.
-        
-        KRBeaconCentral.sharedCentral.scan();
-        
+    func application(application: UIApplication, didFinishLaunchingWithOptions launchOptions: NSDictionary?) -> Bool
+    {
+        beaconFinder             = KRBeaconOne.sharedFinder;
+        beaconFinder.oneDelegate = self;
+        beaconFinder.uuid        = "B9407F30-F5F8-466E-AFF9-25556B57FE6D";
+        beaconFinder.identifier  = "com.kalvar.ibeacons";
+        beaconFinder.awakeDisplay();
         return true
     }
-
+    
     func applicationWillResignActive(application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         // Use this method to pause ongoing tasks, disable timers, and throttle down OpenGL ES frame rates. Games should use this method to pause the game.
@@ -43,7 +47,28 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func applicationWillTerminate(application: UIApplication) {
         // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
     }
-
+    
+    func krBeaconOneDidDetermineState(beaconFinder : KRBeaconOne, state : CLRegionState, region : CLRegion)
+    {
+        let appState : UIApplicationState = UIApplication.sharedApplication().applicationState;
+        println("state : \(appState)");
+        
+        if( appState != UIApplicationState.Active )
+        {
+            if(state == CLRegionState.Inside)
+            {
+                beaconFinder.fireLocalNotification("You're inside the beacon delegate");
+            }
+            else if(state == CLRegionState.Outside)
+            {
+                beaconFinder.fireLocalNotification("You're outside the beacon delegate");
+            }
+            else
+            {
+                return;
+            }
+        }
+    }
 
 }
 

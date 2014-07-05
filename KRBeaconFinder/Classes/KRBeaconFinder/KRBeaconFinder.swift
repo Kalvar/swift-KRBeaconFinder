@@ -28,14 +28,19 @@ enum KRBeaconNotifyModes : Int
     case EntryAndExit
     //1 1 1
     case Default
+    
+    var description : Int
+    {
+        get
+        {
+            return self.toRaw();
+        }
+    }
 }
 
 @objc protocol KRBeaconFinderDelegate : NSObjectProtocol
 {
     @optional func krBeaconFinderDidDetermineState(beaconFinder : KRBeaconFinder, state : CLRegionState, region : CLRegion);
-    
-    //func peripheralManagerDidUpdateState(peripheral: CBPeripheralManager!)
-    //@optional func peripheralManager(peripheral: CBPeripheralManager!, willRestoreState dict: NSDictionary!)
 }
 
 class KRBeaconFinder : NSObject, CLLocationManagerDelegate
@@ -45,7 +50,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     typealias ExitRegionHandler    = (manager : CLLocationManager, region : CLRegion) -> Void;
     typealias DisplayRegionHandler = (manager : CLLocationManager, region : CLRegion, state : CLRegionState) -> Void;
     
-    var delegate         : KRBeaconFinderDelegate?;
+    var delegate         : KRBeaconFinderDelegate? = nil;
     var locationManager  : CLLocationManager!; //一定會有值
     var foundBeacons     : AnyObject[] = []
     {
@@ -58,6 +63,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
             //...
         }
     };
+    
     var rangedRegions    : AnyObject[]
     {
         get
@@ -89,10 +95,10 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     var regions          : CLBeaconRegion[] = [];
     var adverstingRegion : CLBeaconRegion?;
     
-    var foundBeaconsHandler  : FoundBeaconsHandler?; //不一定會有值, 可給 nil
-    var enterRegionHandler   : EnterRegionHandler?;
-    var exitRegionHandler    : ExitRegionHandler?;
-    var displayRegionHandler : DisplayRegionHandler?;
+    var foundBeaconsHandler   : FoundBeaconsHandler?; //不一定會有值, 可給 nil
+    var enterRegionHandler    : EnterRegionHandler?;
+    var exitRegionHandler     : ExitRegionHandler?;
+    var displayRegionHandler  : DisplayRegionHandler?;
     
     var beaconCentral         : KRBeaconCentral?;
     var beaconPeripheral      : KRBeaconPeripheral?;
@@ -100,8 +106,10 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     {
         didSet
         {
-            if beaconCentral
+            //if beaconCentral? != nil
+            if beaconCentral != nil
             {
+                println("beaconCentral != nil");
                 beaconCentral!.scanningEnumerator = bleScanningEnumerator;
             }
         }
@@ -110,42 +118,50 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     /*
      * #pragma --mark Private Methods
      */
-    //func() -> CLBeaconRegion? 代表可以回傳 nil
-    func _makeBeaconRegion(uuid : String, identifier : String, major : UInt16, minor : UInt16, notifyMode : KRBeaconNotifyModes) -> CLBeaconRegion?
+    /*
+     * @ Noted with struct for private
+     *   - 寫在 struct 裡的 private methods 只能用在不需要連動外部參數時的設計裡，如果要連動外部參數，
+     *     就會需要設計額外的流程與動作，過程麻煩，維護與可讀性會降低。
+     *
+     */
+    struct _fixPrivate
     {
-        var _beaconRegion : CLBeaconRegion? = nil;
-        let _proximityUUID : NSUUID         = NSUUID(UUIDString: uuid);
-        /*
-         * @ If major or minor either is zero that means nothing.
-         */
-        if major > 0 && minor > 0
+        //func() -> CLBeaconRegion? 代表可以回傳 nil
+        static func makeBeaconRegion(Uuid uuid : String, identifier : String, major : UInt16, minor : UInt16, notifyMode : KRBeaconNotifyModes) -> CLBeaconRegion?
         {
-            _beaconRegion = CLBeaconRegion(
-                proximityUUID: _proximityUUID,
-                major: major,
-                minor: minor,
-                identifier: identifier
-            );
-        }
-        else
-        {
-            if major > 0
+            var _beaconRegion : CLBeaconRegion? = nil;
+            let _proximityUUID : NSUUID         = NSUUID(UUIDString: uuid);
+            /*
+             * @ If major or minor either is zero that means nothing.
+             */
+            if major > 0 && minor > 0
             {
-                _beaconRegion = CLBeaconRegion(proximityUUID: _proximityUUID, major: major, identifier: identifier);
+                _beaconRegion = CLBeaconRegion(
+                    proximityUUID: _proximityUUID,
+                    major: major,
+                    minor: minor,
+                    identifier: identifier
+                );
             }
             else
             {
-                _beaconRegion = CLBeaconRegion(proximityUUID: _proximityUUID, identifier: identifier);
+                if major > 0
+                {
+                    _beaconRegion = CLBeaconRegion(proximityUUID: _proximityUUID, major: major, identifier: identifier);
+                }
+                else
+                {
+                    _beaconRegion = CLBeaconRegion(proximityUUID: _proximityUUID, identifier: identifier);
+                }
             }
-        }
-        
-        if let _someRegion = _beaconRegion
-        {
-            var _notifyDisplay : Bool = true;
-            var _notifyEntry   : Bool = true;
-            var _notifyExit    : Bool = true;
-            switch notifyMode
+            
+            if let _someRegion = _beaconRegion
             {
+                var _notifyDisplay : Bool = true;
+                var _notifyEntry   : Bool = true;
+                var _notifyExit    : Bool = true;
+                switch notifyMode
+                    {
                 case .Deny :
                     _notifyDisplay = false;
                     _notifyEntry   = false;
@@ -174,13 +190,28 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
                     break;
                 default:
                     break;
+                }
+                
+                _beaconRegion!.notifyEntryStateOnDisplay = _notifyDisplay;
+                _beaconRegion!.notifyOnEntry             = _notifyEntry;
+                _beaconRegion!.notifyOnExit              = _notifyExit;
             }
-            
-            _beaconRegion!.notifyEntryStateOnDisplay = _notifyDisplay;
-            _beaconRegion!.notifyOnEntry             = _notifyEntry;
-            _beaconRegion!.notifyOnExit              = _notifyExit;
+            return _beaconRegion;
         }
-        return _beaconRegion;
+        
+        static func fireLocalNotification(message : String, userInfo : NSDictionary?)
+        {
+            let notification : UILocalNotification = UILocalNotification();
+            notification.alertBody                 = message;
+            notification.userInfo                  = userInfo;
+            //App 如運行在前台，則會直接進入本地通知的委派裡，如運行在後台，則會直接出現通知在螢幕上
+            UIApplication.sharedApplication().presentLocalNotificationNow(notification);
+        }
+        
+        static func fireLocalNotification(message : String)
+        {
+            fireLocalNotification(message, userInfo: nil);
+        }
     }
     
     func _buildLocationManager()
@@ -193,20 +224,6 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
             locationManager.distanceFilter  = kCLDistanceFilterNone;
             locationManager.desiredAccuracy = kCLLocationAccuracyBest;
         }
-    }
-    
-    func _fireLocalNotification(message : String, userInfo : NSDictionary?)
-    {
-        let notification : UILocalNotification = UILocalNotification();
-        notification.alertBody                 = message;
-        notification.userInfo                  = userInfo;
-        //App 如運行在前台，則會直接進入本地通知的委派裡，如運行在後台，則會直接出現通知在螢幕上
-        UIApplication.sharedApplication().presentLocalNotificationNow(notification);
-    }
-    
-    func _fireLocalNotification(message : String)
-    {
-        _fireLocalNotification(message, userInfo: nil);
     }
     
     /*
@@ -251,8 +268,8 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
             //...
         }
         
-        var _beaconRegion : CLBeaconRegion? = _makeBeaconRegion(
-            beaconUuid,
+        var _beaconRegion : CLBeaconRegion? = _fixPrivate.makeBeaconRegion(
+            Uuid       : beaconUuid,
             identifier : beaconIdentifier,
             major      : beaconMajor,
             minor      : beaconMinor,
@@ -351,9 +368,15 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
         );
     }
     
-    func createAdvertisingRegion(uuid : String, identifier : String, major : UInt16, minor : UInt16)
+    func createAdvertisingRegion(Uuid uuid : String, identifier : String, major : UInt16, minor : UInt16)
     {
-        
+        adverstingRegion = _fixPrivate.makeBeaconRegion(
+            Uuid       : uuid,
+            identifier : identifier,
+            major      : major,
+            minor      : minor,
+            notifyMode : KRBeaconNotifyModes.Default
+        );
     }
     
     func canRangeBeacon() -> Bool
@@ -379,7 +402,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     /*
      * @ 開始範圍搜索多顆 Beacons
      */
-    func rangingWithBeaconsFounder(founder : FoundBeaconsHandler?)
+    func ranging(founder : FoundBeaconsHandler?)
     {
         self.foundBeaconsHandler = founder;
         if canRangeBeacon()
@@ -397,7 +420,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     
     func ranging()
     {
-        rangingWithBeaconsFounder( foundBeaconsHandler );
+        ranging( foundBeaconsHandler );
     }
     
     /*
@@ -449,7 +472,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     /*
      * @ 開始監控 Beacons
      */
-    func monitoringWithDisplayHandler(handler : DisplayRegionHandler?)
+    func monitoring(handler : DisplayRegionHandler?)
     {
         self.displayRegionHandler = handler;
         if canMonitorBeacon()
@@ -465,7 +488,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     
     func monitoring()
     {
-        monitoringWithDisplayHandler( displayRegionHandler );
+        monitoring( displayRegionHandler );
     }
     
     /*
@@ -511,7 +534,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
      *     順利能進到 locationManager:didDetermineState:forRegion: 委派方法裡。
      *
      */
-    func awakeDisplayWithFoundCompletion(handler : DisplayRegionHandler?)
+    func awakeDisplay(handler : DisplayRegionHandler?)
     {
         self.displayRegionHandler = handler;
         if canMonitorBeacon()
@@ -523,7 +546,7 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     
     func awakeDisplay()
     {
-        awakeDisplayWithFoundCompletion( displayRegionHandler );
+        awakeDisplay( displayRegionHandler );
     }
     
     func bleScan()
@@ -549,12 +572,12 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     
     func fireLocalNotification(message : String, userInfo : NSDictionary)
     {
-        _fireLocalNotification(message, userInfo : userInfo);
+        _fixPrivate.fireLocalNotification(message, userInfo : userInfo);
     }
     
     func fireLocalNotification(message : String)
     {
-        _fireLocalNotification(message);
+        _fixPrivate.fireLocalNotification(message);
     }
     
     /*
@@ -663,15 +686,13 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
      */
     func locationManager(manager: CLLocationManager!, didDetermineState state: CLRegionState, forRegion region: CLRegion!)
     {
-        if self.delegate
+        //It all of works
+        //delegate?.krBeaconFinderDidDetermineState?(self, state : state, region : region);
+        //if delegate?.krBeaconFinderDidDetermineState?
+        if delegate!.respondsToSelector( Selector("krBeaconFinderDidDetermineState:state:region:") )
         {
-            //func krBeaconFinderDidDetermineState(beaconFinder : KRBeaconFinder, state : CLRegionState, region : CLRegion);
-            
-            if delegate!.respondsToSelector( Selector("krBeaconFinderDidDetermineState:state:region:") )
-            {
-                //因為它是 @optional 的
-                delegate!.krBeaconFinderDidDetermineState!(self, state : state, region : region);
-            }
+            //因為它是 @optional 的，所以要 wrap (!)
+            delegate!.krBeaconFinderDidDetermineState!(self, state : state, region : region);
         }
         
         if( self.displayRegionHandler )
@@ -681,6 +702,4 @@ class KRBeaconFinder : NSObject, CLLocationManagerDelegate
     }
     
 }
-
-
 
