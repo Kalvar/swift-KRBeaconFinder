@@ -34,13 +34,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate, KRBeaconOneDelegate {
         let appState : UIApplicationState = UIApplication.sharedApplication().applicationState;
         println("state : \(appState)");
         
-        if( appState != UIApplicationState.Active )
+        if appState != UIApplicationState.Active
         {
-            if(state == CLRegionState.Inside)
+            if state == CLRegionState.Inside
             {
                 beaconFinder.fireLocalNotification("You're inside the beacon delegate");
             }
-            else if(state == CLRegionState.Outside)
+            else if state == CLRegionState.Outside
             {
                 beaconFinder.fireLocalNotification("You're outside the beacon delegate");
             }
